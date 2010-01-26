@@ -300,7 +300,17 @@ static int server_connect(struct Server *server)
       server->errmsg = strdup(errmsg);
       return -1;
    }
-
+#ifdef __WIN32__
+    static int onceonly = 0;
+    WSADATA wsaData;
+    if (!onceonly) {
+        onceonly = 1;
+        if (WSAStartup(MAKEWORD(2,0), &wsaData) != 0) {
+            fprintf(stderr, "Socket Initialization Error. Program aborted\n");
+            exit(EXIT_FAILURE);
+        }
+    }
+#endif
    if (setsockopt(server->sock, IPPROTO_TCP, TCP_NODELAY,
                   &flag, sizeof(flag)) == -1) {
       perror("Failed to set TCP_NODELAY");
@@ -505,10 +515,11 @@ static int binary_get(struct Server* server, struct Item* item)
          iovec[1].iov_base = item->data;
          iovec[1].iov_len = item->size;
 
-#ifndef __WIN32__
-         ssize_t nread = readv(server->sock, iovec, 2);
+#ifdef __WIN32__
+         ssize_t nread;
+         WSARecv(server->sock, iovec, 2, (LPWORD *)&nread, NULL, NULL, NULL);
 #else
-         ssize_t nread = WSARecv(server->sock, iovec, 2, NULL, NULL, NULL, NULL);
+         ssize_t nread = readv(server->sock, iovec, 2);
 #endif
          if (nread < bodylen) {
              // partial read.. read the rest!
